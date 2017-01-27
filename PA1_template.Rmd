@@ -1,0 +1,146 @@
+Reproducible research class - week 2 project
+============================================
+
+
+# Loading and preprocessing the data
+
+## Show any code that is needed to:
+
+* Load the data (i.e. read.csv())
+* Process/transform the data (if necessary) into a format suitable for your analysis
+
+```{r  echo=TRUE, message=FALSE}
+library(knitr)
+opts_chunk$set(warning = FALSE)
+
+library(dplyr)
+
+setwd("C:\\_Zdata\\MachineLearning\\reproducibleresearch\\week2")
+par(mfrow=c(2,3))
+df_act0         <- read.csv("activity.csv", header = TRUE, sep = ",", quote = "\"")
+#
+df_act          <- df_act0[ !is.na(df_act0$steps), ]
+df_act          <- df_act[ order(df_act$date), ]
+```
+
+
+
+
+## What is mean total number of steps taken per day?
+
+Calculate the total number of steps taken per day
+Make a histogram of the total number of steps taken each day
+Calculate and report the mean and median of the total number of steps taken per day
+```{r}
+dfact1          <- setNames( aggregate( df_act$steps, by=list(date=df_act$date), FUN=sum)
+                             , c("date", "steps_total"))
+with( dfact1, hist(steps_total, breaks = ceiling(max(steps_total/1000)), freq=FALSE))
+dfact2          <- setNames( aggregate( df_act$steps, by=list(date=df_act$date), FUN=mean)
+                             , c("date", "steps_mean"))
+dfact3          <- setNames( aggregate( df_act$steps, by=list(date=df_act$date), FUN=median)
+                             , c("date", "steps_median"))
+dfall           <- bind_cols(dfact1, data.frame(steps_mean=dfact2$steps_mean)
+                             ,  data.frame(steps_median=dfact3$steps_median))
+dfall[,c("steps_mean", "steps_median")]
+```
+
+
+
+## What is the average daily activity pattern?
+
+Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the 
+average number of steps taken, averaged across all days (y-axis)
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r}
+dfactx          <- setNames( aggregate( df_act$steps, by=list(date=df_act$interval), FUN=mean)
+                             , c("interval", "steps_avg_5min"))
+with(dfactx, plot(interval, steps_avg_5min, main="mean_steps by 5min", type="l") )
+maxpoint        <- dfactx$interval[dfactx$steps_avg_5min==max(dfactx$steps_avg_5min)] 
+ps              <- paste0("max number of steps is in ", toString(maxpoint), "th interval")
+cat(ps)
+
+abline(v=maxpoint, col="purple", lwd=2)
+legend("topright", 400, c("max point"), col=c("purple"), lty=c(1,1), lwd=c(2.5, 2.5))
+```
+
+## Imputing missing values
+
+Note that there are a number of days/intervals where there are missing values (coded as NA)
+. The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to 
+be sophisticated. For example, you could use the mean/median for that day, or the mean for that 
+5-minute interval, etc.
+Create a new dataset that is equal to the original dataset but with the missing data filled in.
+Make a histogram of the total number of steps taken each day and Calculate and report the mean 
+and median total number of steps taken per day. 
+
+Do these values differ from the estimates from the first part of the assignment? 
+What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r}
+# total number of NAs
+nacount         <- sum(is.na(df_act0$steps ))
+ps              <- paste0("total number of NA steps values is ", toString(nacount))
+cat(ps)
+
+#       Devise a strategy for filling in all of the missing values in the dataset. 
+#       The strategy does not need to be sophisticated. For example, you could use 
+#       the mean/median for that day, or the mean for that 5-minute interval, etc.
+#
+fff             <- function( x ) {
+        x$steps_mean   <- mean(x$steps[!is.na(x$steps)], na.rm=TRUE)
+        x
+}
+df_actcomplete  <- df_act0
+dfs             <- split(df_actcomplete, df_actcomplete$interval) 
+df2             <- lapply( dfs, fff ) %>% bind_rows() 
+dfcomplete      <- df2[ with( df2, order( date, interval)), ]
+dfcomplete$steps[is.na(dfcomplete$steps)]       <- dfcomplete$steps_mean 
+
+dfcomplete1     <- setNames( aggregate( dfcomplete$steps, by=list(date=dfcomplete$date), FUN=sum)
+                             , c("date", "steps_total"))
+with( dfcomplete1, hist(steps_total, breaks = ceiling(max(steps_total/1000)), freq=FALSE) )
+dfcomplete2     <- setNames( aggregate( dfcomplete$steps, by=list(date=dfcomplete$date), FUN=mean)
+                             , c("date", "steps_mean"))
+dfcomplete3     <- setNames( aggregate( dfcomplete$steps, by=list(date=dfcomplete$date), FUN=median)
+                             , c("date", "steps_median"))
+dfcompleteall   <- bind_cols(dfcomplete1, data.frame(steps_mean=dfcomplete2$steps_mean)
+                             ,  data.frame(steps_median=dfcomplete3$steps_median))
+#dfcompleteall[,c("steps_mean", "steps_median")]
+```
+
+so values do differ from the first part of the assignment;
+impact of imputing missing data is that shape of the histogram changed.
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+For this part the weekdays() function may be of some help here. Use the dataset with the filled-in 
+missing values for this part.
+
+Create a new factor variable in the dataset with two levels ??? ???weekday??? and ???weekend??? indicating 
+whether a given date is a weekday or weekend day.
+Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) 
+and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+See the README file in the GitHub repository to see an example of what this plot should look like 
+using simulated data.
+
+```{r}
+dfcomplete$dayinweek <- weekdays(as.Date(dfcomplete$date))
+dfcomplete$workday   <- "weekday"
+dfcomplete$workday[ !(dfcomplete$dayinweek %in% c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')) ] <- "weekend"
+
+dfactxx         <- setNames( aggregate( dfcomplete$steps, by=list(interval=dfcomplete$interval
+                        , typeofday=dfcomplete$workday), FUN=mean), c("interval", "typeofday", "steps_avg_5min"))
+dfactxx_work    <- dfactxx[ dfactxx$typeofday=="weekday",]
+dfactxx_workNot <- dfactxx[ dfactxx$typeofday=="weekend",]
+ylimm           <- c(0, 1.2* max(dfactxx$steps_avg_5min) )
+with(dfactxx_work, plot(interval,steps_avg_5min, type="l", ylim=ylimm) )
+with(dfactxx_workNot, plot(interval,steps_avg_5min, type="l", ylim=ylimm) )
+
+cat("all done\n")
+```
+
+
